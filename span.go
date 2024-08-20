@@ -1,32 +1,40 @@
 package span
 
 import (
-	"sort"
+	"slices"
 	"math"
 	"iter"
 )
 
-type Pos interface {
-	Cmp(Pos) int
+type Cmpf[T any] func(T, T) int
+
+type Spanner[T any] interface {
+	Left() T
+	Right() T
 }
 
-type Span interface {
-	Left() Pos
-	Right() Pos
+type Span[T any] struct {
+	Start T
+	End T
 }
 
-type Pos2 interface {
-	Cmp(Pos2) int
+func (s Span[T]) Left() T {
+	return s.Start
 }
 
-func Min(ps ...Pos) Pos {
+func (s Span[T]) Right() T {
+	return s.End
+}
+
+func Min[T any](cmpf Cmpf[T], ps ...T) T {
 	if len(ps) < 1 {
-		return nil
+		var t T
+		return t
 	}
 
 	out := ps[0]
 	for _, p := range ps[1:] {
-		if p.Cmp(out) < 0 {
+		if cmpf(p, out) < 0 {
 			out = p
 		}
 	}
@@ -34,14 +42,15 @@ func Min(ps ...Pos) Pos {
 	return out
 }
 
-func Max(ps ...Pos) Pos {
+func Max[T any](cmpf Cmpf[T], ps ...T) T {
 	if len(ps) < 1 {
-		return nil
+		var t T
+		return t
 	}
 
 	out := ps[0]
 	for _, p := range ps[1:] {
-		if p.Cmp(out) > 0 {
+		if cmpf(p, out) > 0 {
 			out = p
 		}
 	}
@@ -49,130 +58,108 @@ func Max(ps ...Pos) Pos {
 	return out
 }
 
-func Touching(s1, s2 Span) bool {
-	right := Min(s1.Right(), s2.Right())
-	left := Max(s1.Left(), s2.Left())
-	return left.Cmp(right) <= 0
+func Touching[T any](cmpf Cmpf[T], s1, s2 Spanner[T]) bool {
+	right := Min(cmpf, s1.Right(), s2.Right())
+	left := Max(cmpf, s1.Left(), s2.Left())
+	return cmpf(left, right) <= 0
 }
 
-func Overlapping(s1, s2 Span) bool {
-	right := Min(s1.Right(), s2.Right())
-	left := Max(s1.Left(), s2.Left())
-	return left.Cmp(right) < 0
+func Overlapping[T any](cmpf Cmpf[T], s1, s2 Spanner[T]) bool {
+	right := Min(cmpf, s1.Right(), s2.Right())
+	left := Max(cmpf, s1.Left(), s2.Left())
+	return cmpf(left, right) < 0
 }
 
-type span struct {
-	left Pos
-	right Pos
-}
-
-func (s span) Left() Pos {
-	return s.left
-}
-
-func (s span) Right() Pos {
-	return s.right
-}
-
-func Union(s1, s2 Span) Span {
-	if !Touching(s1, s2) {
-		return nil
+func Union[T any](cmpf Cmpf[T], s1, s2 Spanner[T]) (Span[T], bool) {
+	if !Touching(cmpf, s1, s2) {
+		return Span[T]{}, false
 	}
-	return span{Min(s1.Left(), s2.Left()), Max(s1.Right(), s2.Right())}
+	return Span[T]{Min(cmpf, s1.Left(), s2.Left()), Max(cmpf, s1.Right(), s2.Right())}, true
 }
 
-func Intersect(s1, s2 Span) Span {
-	if !Overlapping(s1, s2) {
-		return nil
+func Intersect[T any](cmpf Cmpf[T], s1, s2 Spanner[T]) (Span[T], bool) {
+	if !Overlapping(cmpf, s1, s2) {
+		return Span[T]{}, false
 	}
-	return span{Max(s1.Left(), s2.Left()), Min(s1.Right(), s2.Right())}
+	return Span[T]{Max(cmpf, s1.Left(), s2.Left()), Min(cmpf, s1.Right(), s2.Right())}, true
 }
 
-func Range(ss ...Span) Span {
+func Range[S Spanner[T], T any](cmpf Cmpf[T], ss ...S) Span[T] {
 	if len(ss) < 1 {
-		return nil
+		return Span[T]{}
 	}
 	lmin := ss[0].Left()
 	rmax := ss[0].Right()
 	for _, s := range ss {
-		if s.Left().Cmp(lmin) < 0 {
+		if cmpf(s.Left(), lmin) < 0 {
 			lmin = s.Left()
 		}
-		if s.Right().Cmp(rmax) > 0 {
+		if cmpf(s.Right(), rmax) > 0 {
 			rmax = s.Right()
 		}
 	}
 
-	return span{lmin, rmax}
+	return Span[T]{lmin, rmax}
 }
 
-func SortSpans(ss []Span) {
-	sort.Slice(ss, func(i, j int) bool {
-		return ss[i].Left().Cmp(ss[j].Left()) < 0
+func SortSpans[T any](cmpf Cmpf[T], ss []Spanner[T]) {
+	slices.SortFunc(ss, func(a, b Spanner[T]) int {
+		return cmpf(a.Left(), b.Left())
 	})
 }
 
-type bucket struct {
+type bucket[T any] struct {
 	sorted bool
-	full span
-	members []Span
+	full Span[T]
+	members []Spanner[T]
 }
 
-func (b bucket) Left() Pos {
+func (b bucket[T]) Left() T {
 	return b.full.Left()
 }
 
-func (b bucket) Right() Pos {
+func (b bucket[T]) Right() T {
 	return b.full.Right()
 }
 
-func sortBuckets(bs []bucket) {
-	sort.Slice(bs, func(i, j int) bool {
-		return bs[i].full.Left().Cmp(bs[j].full.Left()) < 0
+func sortBuckets[T any](cmpf Cmpf[T], bs []bucket[T]) {
+	slices.SortFunc(bs, func(a, b bucket[T]) int {
+		return cmpf(a.full.Left(), a.full.Right())
 	})
 }
 
-func (b *bucket) Add(sp Span) {
+func (b *bucket[T]) Add(cmpf Cmpf[T], sp Spanner[T]) {
 	b.sorted = false
 	b.members = append(b.members, sp)
 
-	if b.full.left == nil {
-		b.full.left = sp.Left()
-	} else {
-		b.full.left = Min(b.full.Left(), sp.Left())
-	}
-
-	if b.full.right == nil {
-		b.full.right = sp.Right()
-	} else {
-		b.full.right = Max(b.full.Right(), sp.Right())
-	}
+	b.full.Start = Min(cmpf, b.full.Left(), sp.Left())
+	b.full.End = Max(cmpf, b.full.Right(), sp.Right())
 }
 
-func (b *bucket) Sort() {
+func (b *bucket[T]) Sort(cmpf Cmpf[T]) {
 	b.sorted = true
-	SortSpans(b.members)
+	SortSpans(cmpf, b.members)
 }
 
-type Set struct {
+type Set[T any] struct {
 	sorted bool
 	largestBucketSize int
-	buckets []bucket
+	buckets []bucket[T]
 }
 
-func (s *Set) Sort() {
+func (s *Set[T]) Sort(cmpf Cmpf[T]) {
 	s.sorted = true
-	sortBuckets(s.buckets)
+	sortBuckets(cmpf, s.buckets)
 }
 
-func (s *Set) firstTouch(sp Span) (bi, si int) {
+func (s *Set[T]) firstTouch(cmpf Cmpf[T], sp Spanner[T]) (bi, si int) {
 	for i, b := range s.buckets {
-		if sp.Right().Cmp(b.Left()) < 0 {
+		if cmpf(sp.Right(), b.Left()) < 0 {
 			return -1, -1
 		}
-		if Touching(sp, b) {
+		if Touching(cmpf, sp, b) {
 			for j, m := range b.members {
-				if Touching(sp, m) {
+				if Touching(cmpf, sp, m) {
 					return i, j
 				}
 			}
@@ -181,30 +168,30 @@ func (s *Set) firstTouch(sp Span) (bi, si int) {
 	return len(s.buckets), -1
 }
 
-func (s *Set) Touching(sp Span) bool {
-	_, j := s.firstTouch(sp)
+func (s *Set[T]) Touching(cmpf Cmpf[T], sp Spanner[T]) bool {
+	_, j := s.firstTouch(cmpf, sp)
 	return j != -1
 }
 
-func (s *Set) Add(sp Span) {
+func (s *Set[T]) Add(cmpf Cmpf[T], sp Spanner[T]) {
 	s.sorted = false
 
 	if len(s.buckets) < 1 {
-		s.buckets = append(s.buckets, bucket{
-			full: span{sp.Left(), sp.Right()},
+		s.buckets = append(s.buckets, bucket[T]{
+			full: Span[T]{sp.Left(), sp.Right()},
 		})
 	}
 
-	i, j := s.firstTouch(sp)
+	i, j := s.firstTouch(cmpf, sp)
 	var newbucketsize int
 	if j >= 0 {
-		s.buckets[i].Add(sp)
+		s.buckets[i].Add(cmpf, sp)
 		newbucketsize = len(s.buckets[i].members)
 	} else if i == -1 {
-		s.buckets[0].Add(sp)
+		s.buckets[0].Add(cmpf, sp)
 		newbucketsize = len(s.buckets[0].members)
 	} else {
-		s.buckets[len(s.buckets)-1].Add(sp)
+		s.buckets[len(s.buckets)-1].Add(cmpf, sp)
 		newbucketsize = len(s.buckets[len(s.buckets)-1].members)
 	}
 
@@ -213,25 +200,25 @@ func (s *Set) Add(sp Span) {
 	}
 
 	if s.NeedsResize() {
-		s.Resize()
+		s.Resize(cmpf)
 	}
 }
 
-func (s *Set) NeedsResize() bool {
+func (s *Set[T]) NeedsResize() bool {
 	target := len(s.buckets) + 20
 	return s.largestBucketSize > target
 }
 
-func (s *Set) All() iter.Seq[Span] {
-	return func(yield func(Span) bool) {
+func (s *Set[T]) All(cmpf Cmpf[T]) iter.Seq[Spanner[T]] {
+	return func(yield func(Spanner[T]) bool) {
 		if !s.sorted {
-			s.Sort()
+			s.Sort(cmpf)
 		}
 
 		for i, _ := range s.buckets {
 			b := &s.buckets[i]
 			if !b.sorted {
-				b.Sort()
+				b.Sort(cmpf)
 			}
 			for _, sp := range b.members {
 				if !yield(sp) {
@@ -242,7 +229,7 @@ func (s *Set) All() iter.Seq[Span] {
 	}
 }
 
-func (s *Set) Resize() {
+func (s *Set[T]) Resize(cmpf Cmpf[T]) {
 	count := 0
 	for _, b := range s.buckets {
 		count += len(b.members)
@@ -250,21 +237,21 @@ func (s *Set) Resize() {
 	target := int(math.Ceil(math.Sqrt(float64(count))))
 
 	s.largestBucketSize = 0
-	newBuckets := make([]bucket, 0, target)
+	newBuckets := make([]bucket[T], 0, target)
 
-	spans := s.All()
+	spans := s.All(cmpf)
 
 	i := 0
 	for sp := range spans {
 		if i % target == 0 {
-			b := bucket{}
-			b.full.left = sp.Left()
-			b.full.right = sp.Right()
+			b := bucket[T]{}
+			b.full.Start = sp.Left()
+			b.full.End = sp.Right()
 			newBuckets = append(newBuckets, b)
 		}
 
 		b := &newBuckets[len(newBuckets) - 1]
-		b.Add(sp)
+		b.Add(cmpf, sp)
 		if len(b.members) > s.largestBucketSize {
 			s.largestBucketSize = len(b.members)
 		}
