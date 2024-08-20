@@ -145,21 +145,26 @@ type Set[T any] struct {
 	sorted bool
 	largestBucketSize int
 	buckets []bucket[T]
+	cmpf Cmpf[T]
 }
 
-func (s *Set[T]) Sort(cmpf Cmpf[T]) {
+func NewSet[T any](cmpf Cmpf[T]) *Set[T] {
+	return &Set[T]{cmpf: cmpf}
+}
+
+func (s *Set[T]) Sort() {
 	s.sorted = true
-	sortBuckets(cmpf, s.buckets)
+	sortBuckets(s.cmpf, s.buckets)
 }
 
-func (s *Set[T]) firstTouch(cmpf Cmpf[T], sp Spanner[T]) (bi, si int) {
+func (s *Set[T]) firstTouch(sp Spanner[T]) (bi, si int) {
 	for i, b := range s.buckets {
-		if cmpf(sp.Right(), b.Left()) < 0 {
+		if s.cmpf(sp.Right(), b.Left()) < 0 {
 			return -1, -1
 		}
-		if Touching(cmpf, sp, b) {
+		if Touching(s.cmpf, sp, b) {
 			for j, m := range b.members {
-				if Touching(cmpf, sp, m) {
+				if Touching(s.cmpf, sp, m) {
 					return i, j
 				}
 			}
@@ -168,12 +173,12 @@ func (s *Set[T]) firstTouch(cmpf Cmpf[T], sp Spanner[T]) (bi, si int) {
 	return len(s.buckets), -1
 }
 
-func (s *Set[T]) Touching(cmpf Cmpf[T], sp Spanner[T]) bool {
-	_, j := s.firstTouch(cmpf, sp)
+func (s *Set[T]) Touching(sp Spanner[T]) bool {
+	_, j := s.firstTouch(sp)
 	return j != -1
 }
 
-func (s *Set[T]) Add(cmpf Cmpf[T], sp Spanner[T]) {
+func (s *Set[T]) Add(sp Spanner[T]) {
 	s.sorted = false
 
 	if len(s.buckets) < 1 {
@@ -182,16 +187,16 @@ func (s *Set[T]) Add(cmpf Cmpf[T], sp Spanner[T]) {
 		})
 	}
 
-	i, j := s.firstTouch(cmpf, sp)
+	i, j := s.firstTouch(sp)
 	var newbucketsize int
 	if j >= 0 {
-		s.buckets[i].Add(cmpf, sp)
+		s.buckets[i].Add(s.cmpf, sp)
 		newbucketsize = len(s.buckets[i].members)
 	} else if i == -1 {
-		s.buckets[0].Add(cmpf, sp)
+		s.buckets[0].Add(s.cmpf, sp)
 		newbucketsize = len(s.buckets[0].members)
 	} else {
-		s.buckets[len(s.buckets)-1].Add(cmpf, sp)
+		s.buckets[len(s.buckets)-1].Add(s.cmpf, sp)
 		newbucketsize = len(s.buckets[len(s.buckets)-1].members)
 	}
 
@@ -200,7 +205,7 @@ func (s *Set[T]) Add(cmpf Cmpf[T], sp Spanner[T]) {
 	}
 
 	if s.NeedsResize() {
-		s.Resize(cmpf)
+		s.Resize()
 	}
 }
 
@@ -209,16 +214,16 @@ func (s *Set[T]) NeedsResize() bool {
 	return s.largestBucketSize > target
 }
 
-func (s *Set[T]) All(cmpf Cmpf[T]) iter.Seq[Spanner[T]] {
+func (s *Set[T]) All() iter.Seq[Spanner[T]] {
 	return func(yield func(Spanner[T]) bool) {
 		if !s.sorted {
-			s.Sort(cmpf)
+			s.Sort()
 		}
 
 		for i, _ := range s.buckets {
 			b := &s.buckets[i]
 			if !b.sorted {
-				b.Sort(cmpf)
+				b.Sort(s.cmpf)
 			}
 			for _, sp := range b.members {
 				if !yield(sp) {
@@ -229,7 +234,7 @@ func (s *Set[T]) All(cmpf Cmpf[T]) iter.Seq[Spanner[T]] {
 	}
 }
 
-func (s *Set[T]) Resize(cmpf Cmpf[T]) {
+func (s *Set[T]) Resize() {
 	count := 0
 	for _, b := range s.buckets {
 		count += len(b.members)
@@ -239,7 +244,7 @@ func (s *Set[T]) Resize(cmpf Cmpf[T]) {
 	s.largestBucketSize = 0
 	newBuckets := make([]bucket[T], 0, target)
 
-	spans := s.All(cmpf)
+	spans := s.All()
 
 	i := 0
 	for sp := range spans {
@@ -251,7 +256,7 @@ func (s *Set[T]) Resize(cmpf Cmpf[T]) {
 		}
 
 		b := &newBuckets[len(newBuckets) - 1]
-		b.Add(cmpf, sp)
+		b.Add(s.cmpf, sp)
 		if len(b.members) > s.largestBucketSize {
 			s.largestBucketSize = len(b.members)
 		}
