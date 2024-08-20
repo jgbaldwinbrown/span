@@ -1,6 +1,6 @@
 module github.com/jgbaldwinbrown/span
 
-go 1.20
+go 1.23
 
 require github.com/jgbaldwinbrown/iter v0.1.4
 

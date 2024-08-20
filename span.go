@@ -3,7 +3,7 @@ package span
 import (
 	"sort"
 	"math"
-	"github.com/jgbaldwinbrown/iter"
+	"iter"
 )
 
 type Pos interface {
@@ -222,8 +222,8 @@ func (s *Set) NeedsResize() bool {
 	return s.largestBucketSize > target
 }
 
-func (s *Set) IterateSpans() *iter.Iterator[Span] {
-	return &iter.Iterator[Span]{Iteratef: func(yield func(Span) error) error {
+func (s *Set) All() iter.Seq[Span] {
+	return func(yield func(Span) bool) {
 		if !s.sorted {
 			s.Sort()
 		}
@@ -234,14 +234,12 @@ func (s *Set) IterateSpans() *iter.Iterator[Span] {
 				b.Sort()
 			}
 			for _, sp := range b.members {
-				e := yield(sp)
-				if e != nil {
-					return e
+				if !yield(sp) {
+					return
 				}
 			}
 		}
-		return nil
-	}}
+	}
 }
 
 func (s *Set) Resize() {
@@ -254,10 +252,10 @@ func (s *Set) Resize() {
 	s.largestBucketSize = 0
 	newBuckets := make([]bucket, 0, target)
 
-	spans := s.IterateSpans()
+	spans := s.All()
 
 	i := 0
-	err := spans.Iterate(func(sp Span) error {
+	for sp := range spans {
 		if i % target == 0 {
 			b := bucket{}
 			b.full.left = sp.Left()
@@ -272,10 +270,6 @@ func (s *Set) Resize() {
 		}
 
 		i++
-		return nil
-	})
-	if err != nil {
-		panic(err)
 	}
 
 	s.buckets = newBuckets
