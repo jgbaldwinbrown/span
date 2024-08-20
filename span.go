@@ -1,6 +1,7 @@
 package span
 
 import (
+	"cmp"
 	"slices"
 	"math"
 	"iter"
@@ -26,7 +27,7 @@ func (s Span[T]) Right() T {
 	return s.End
 }
 
-func Min[T any](cmpf Cmpf[T], ps ...T) T {
+func MinFunc[T any](cmpf Cmpf[T], ps ...T) T {
 	if len(ps) < 1 {
 		var t T
 		return t
@@ -42,7 +43,11 @@ func Min[T any](cmpf Cmpf[T], ps ...T) T {
 	return out
 }
 
-func Max[T any](cmpf Cmpf[T], ps ...T) T {
+func Min[T cmp.Ordered](ps ...T) T {
+	return MinFunc(cmp.Compare, ps...)
+}
+
+func MaxFunc[T any](cmpf Cmpf[T], ps ...T) T {
 	if len(ps) < 1 {
 		var t T
 		return t
@@ -58,33 +63,53 @@ func Max[T any](cmpf Cmpf[T], ps ...T) T {
 	return out
 }
 
-func Touching[T any](cmpf Cmpf[T], s1, s2 Spanner[T]) bool {
-	right := Min(cmpf, s1.Right(), s2.Right())
-	left := Max(cmpf, s1.Left(), s2.Left())
+func Max[T cmp.Ordered](ps ...T) T {
+	return MaxFunc(cmp.Compare, ps...)
+}
+
+func TouchingFunc[T any](cmpf Cmpf[T], s1, s2 Spanner[T]) bool {
+	right := MinFunc(cmpf, s1.Right(), s2.Right())
+	left := MaxFunc(cmpf, s1.Left(), s2.Left())
 	return cmpf(left, right) <= 0
 }
 
-func Overlapping[T any](cmpf Cmpf[T], s1, s2 Spanner[T]) bool {
-	right := Min(cmpf, s1.Right(), s2.Right())
-	left := Max(cmpf, s1.Left(), s2.Left())
+func Touching[T cmp.Ordered](s1, s2 Spanner[T]) bool {
+	return TouchingFunc(cmp.Compare, s1, s2)
+}
+
+func OverlappingFunc[T any](cmpf Cmpf[T], s1, s2 Spanner[T]) bool {
+	right := MinFunc(cmpf, s1.Right(), s2.Right())
+	left := MaxFunc(cmpf, s1.Left(), s2.Left())
 	return cmpf(left, right) < 0
 }
 
-func Union[T any](cmpf Cmpf[T], s1, s2 Spanner[T]) (Span[T], bool) {
-	if !Touching(cmpf, s1, s2) {
-		return Span[T]{}, false
-	}
-	return Span[T]{Min(cmpf, s1.Left(), s2.Left()), Max(cmpf, s1.Right(), s2.Right())}, true
+func Overlapping[T cmp.Ordered](s1, s2 Spanner[T]) bool {
+	return OverlappingFunc(cmp.Compare, s1, s2)
 }
 
-func Intersect[T any](cmpf Cmpf[T], s1, s2 Spanner[T]) (Span[T], bool) {
-	if !Overlapping(cmpf, s1, s2) {
+func UnionFunc[T any](cmpf Cmpf[T], s1, s2 Spanner[T]) (Span[T], bool) {
+	if !TouchingFunc(cmpf, s1, s2) {
 		return Span[T]{}, false
 	}
-	return Span[T]{Max(cmpf, s1.Left(), s2.Left()), Min(cmpf, s1.Right(), s2.Right())}, true
+	return Span[T]{MinFunc(cmpf, s1.Left(), s2.Left()), MaxFunc(cmpf, s1.Right(), s2.Right())}, true
 }
 
-func Range[S Spanner[T], T any](cmpf Cmpf[T], ss ...S) Span[T] {
+func Union[T cmp.Ordered](s1, s2 Spanner[T]) (Span[T], bool) {
+	return UnionFunc(cmp.Compare, s1, s2)
+}
+
+func IntersectFunc[T any](cmpf Cmpf[T], s1, s2 Spanner[T]) (Span[T], bool) {
+	if !OverlappingFunc(cmpf, s1, s2) {
+		return Span[T]{}, false
+	}
+	return Span[T]{MaxFunc(cmpf, s1.Left(), s2.Left()), MinFunc(cmpf, s1.Right(), s2.Right())}, true
+}
+
+func Intersect[T cmp.Ordered](s1, s2 Spanner[T]) (Span[T], bool) {
+	return IntersectFunc(cmp.Compare, s1, s2)
+}
+
+func RangeFunc[S Spanner[T], T any](cmpf Cmpf[T], ss ...S) Span[T] {
 	if len(ss) < 1 {
 		return Span[T]{}
 	}
@@ -102,10 +127,18 @@ func Range[S Spanner[T], T any](cmpf Cmpf[T], ss ...S) Span[T] {
 	return Span[T]{lmin, rmax}
 }
 
-func SortSpans[T any](cmpf Cmpf[T], ss []Spanner[T]) {
+func Range[S Spanner[T], T cmp.Ordered](ss ...S) Span[T] {
+	return RangeFunc(cmp.Compare, ss...)
+}
+
+func SortSpansFunc[T any](cmpf Cmpf[T], ss []Spanner[T]) {
 	slices.SortFunc(ss, func(a, b Spanner[T]) int {
 		return cmpf(a.Left(), b.Left())
 	})
+}
+
+func SortSpans[T cmp.Ordered](ss []Spanner[T]) {
+	SortSpansFunc(cmp.Compare, ss)
 }
 
 type bucket[T any] struct {
@@ -132,13 +165,13 @@ func (b *bucket[T]) Add(cmpf Cmpf[T], sp Spanner[T]) {
 	b.sorted = false
 	b.members = append(b.members, sp)
 
-	b.full.Start = Min(cmpf, b.full.Left(), sp.Left())
-	b.full.End = Max(cmpf, b.full.Right(), sp.Right())
+	b.full.Start = MinFunc(cmpf, b.full.Left(), sp.Left())
+	b.full.End = MaxFunc(cmpf, b.full.Right(), sp.Right())
 }
 
 func (b *bucket[T]) Sort(cmpf Cmpf[T]) {
 	b.sorted = true
-	SortSpans(cmpf, b.members)
+	SortSpansFunc(cmpf, b.members)
 }
 
 type Set[T any] struct {
@@ -148,8 +181,12 @@ type Set[T any] struct {
 	cmpf Cmpf[T]
 }
 
-func NewSet[T any](cmpf Cmpf[T]) *Set[T] {
+func NewSetFunc[T any](cmpf Cmpf[T]) *Set[T] {
 	return &Set[T]{cmpf: cmpf}
+}
+
+func NewSet[T cmp.Ordered]() *Set[T] {
+	return &Set[T]{cmpf: cmp.Compare[T]}
 }
 
 func (s *Set[T]) Sort() {
@@ -162,9 +199,9 @@ func (s *Set[T]) firstTouch(sp Spanner[T]) (bi, si int) {
 		if s.cmpf(sp.Right(), b.Left()) < 0 {
 			return -1, -1
 		}
-		if Touching(s.cmpf, sp, b) {
+		if TouchingFunc(s.cmpf, sp, b) {
 			for j, m := range b.members {
-				if Touching(s.cmpf, sp, m) {
+				if TouchingFunc(s.cmpf, sp, m) {
 					return i, j
 				}
 			}
