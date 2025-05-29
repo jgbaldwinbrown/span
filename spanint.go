@@ -58,7 +58,7 @@ func (s *IntSet[T]) addHitsIdxs(dst map[int]struct{}, t T) {
 	}
 }
 
-func (s *IntSet[T]) findHits(dst []T, t T) []T {
+func (s *IntSet[T]) FindHits(dst []T, t T) []T {
 	m := map[int]struct{}{}
 	s.addHitsIdxs(m, t)
 	for idx, _ := range m {
