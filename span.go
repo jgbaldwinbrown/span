@@ -27,7 +27,14 @@ func (s Span[T]) Right() T {
 	return s.End
 }
 
-func MinFunc[T any](cmpf Cmpf[T], ps ...T) T {
+func MinFunc[T any](cmpf Cmpf[T], a, b T) T {
+	if cmpf(a, b) <= 0 {
+		return a
+	}
+	return b
+}
+
+func ManyMinFunc[T any](cmpf Cmpf[T], ps ...T) T {
 	if len(ps) < 1 {
 		var t T
 		return t
@@ -43,11 +50,22 @@ func MinFunc[T any](cmpf Cmpf[T], ps ...T) T {
 	return out
 }
 
-func Min[T cmp.Ordered](ps ...T) T {
-	return MinFunc(cmp.Compare, ps...)
+func Min[T cmp.Ordered](a, b T) T {
+	return MinFunc(cmp.Compare, a, b)
 }
 
-func MaxFunc[T any](cmpf Cmpf[T], ps ...T) T {
+func ManyMin[T cmp.Ordered](ps ...T) T {
+	return ManyMinFunc(cmp.Compare, ps...)
+}
+
+func MaxFunc[T any](cmpf Cmpf[T], a, b T) T {
+	if cmpf(a, b) > 0 {
+		return a
+	}
+	return b
+}
+
+func ManyMaxFunc[T any](cmpf Cmpf[T], ps ...T) T {
 	if len(ps) < 1 {
 		var t T
 		return t
@@ -63,8 +81,12 @@ func MaxFunc[T any](cmpf Cmpf[T], ps ...T) T {
 	return out
 }
 
-func Max[T cmp.Ordered](ps ...T) T {
-	return MaxFunc(cmp.Compare, ps...)
+func Max[T cmp.Ordered](a, b T) T {
+	return MaxFunc(cmp.Compare, a, b)
+}
+
+func ManyMax[T cmp.Ordered](ps ...T) T {
+	return ManyMaxFunc(cmp.Compare, ps...)
 }
 
 func TouchingFunc[T any](cmpf Cmpf[T], s1, s2 Spanner[T]) bool {
