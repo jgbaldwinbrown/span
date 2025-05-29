@@ -67,7 +67,7 @@ func (s *IntSet[T]) FindHits(dst []T, t T) []T {
 	return dst
 }
 
-func (s *IntSet[T]) Touching(t T) bool {
+func (s *IntSet[T]) Touching(t Spanner[int64]) bool {
 	l, r := t.Left(), t.Right()
 	lw, rw := leftWin(s.winsize, l), rightWin(s.winsize, r)
 	for i := lw; i < rw; i += s.winsize {
