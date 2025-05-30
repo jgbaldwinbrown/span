@@ -82,6 +82,7 @@ func (s *IntSet[T]) Touching(t Spanner[int64]) bool {
 
 func NewIntSet[T Spanner[int64]](winsize int64, values ...T) *IntSet[T] {
 	s := &IntSet[T]{}
+	s.wins = map[int64][]int{}
 	s.winsize = winsize
 	for _, t := range values {
 		s.Add(t)
@@ -91,6 +92,7 @@ func NewIntSet[T Spanner[int64]](winsize int64, values ...T) *IntSet[T] {
 
 func NewIntSetDynamic[T Spanner[int64]](values ...T) *IntSet[T] {
 	s := &IntSet[T]{}
+	s.wins = map[int64][]int{}
 	s.winsize = 1 << 32
 	for _, t := range values {
 		s.AddDynamic(t)
