@@ -40,7 +40,7 @@ func (s *IntSet[T]) Add(t T) {
 
 func (s *IntSet[T]) AddDynamic(t T) {
 	s.Add(t)
-	if s.winsize > 1 && s.biggestBin > s.total / 1000 {
+	if s.winsize > (1 << 10) && s.biggestBin > s.total / 1000 {
 		s2 := NewIntSet(s.winsize / 2, s.Spanners()...)
 		*s = *s2
 	}
