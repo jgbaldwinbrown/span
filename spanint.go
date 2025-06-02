@@ -52,6 +52,50 @@ func (s *OrderedSet[S, T]) Touching(t S) bool {
 	return s.Right.Touching(t)
 }
 
+func (s *OrderedSet[S, T]) AppendTouched(dst *[]S, t S) {
+	if s == nil {
+		return
+	}
+	if SpanTouchingPointFunc(t, s.Center, s.Cmpf) {
+		for _, span := range s.StartSorted {
+			if TouchingFunc(s.Cmpf, span, t) {
+				*dst = append(*dst, span)
+			}
+		}
+		s.Left.AppendTouched(dst, t)
+		s.Right.AppendTouched(dst, t)
+		return
+	}
+	if s.Cmpf(t.Right(), s.Center) <= 0 {
+		for _, span := range s.StartSorted {
+			if s.Cmpf(span.Left(), t.Right()) >= 0 {
+				break
+			}
+			if TouchingFunc(s.Cmpf, span, t) {
+				*dst = append(*dst, span)
+			}
+		}
+		s.Left.AppendTouched(dst, t)
+		return
+	}
+	for i := len(s.EndSorted)-1; i >= 0; i-- {
+		span := s.EndSorted[i]
+		if s.Cmpf(span.Right(), t.Left()) <= 0 {
+			break
+		}
+		if TouchingFunc(s.Cmpf, span, t) {
+			*dst = append(*dst, span)
+		}
+	}
+	s.Right.AppendTouched(dst, t)
+}
+
+func (s *OrderedSet[S, T]) Touched(t S) []S {
+	var out []S
+	s.AppendTouched(&out, t)
+	return out
+}
+
 func SpanTouchingPointFunc[S Spanner[T], T any](s S, t T, cmpf func(x, y T) int) bool {
 	return cmpf(t, s.Left()) >= 0 && cmpf(t, s.Right()) < 0
 }

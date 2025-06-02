@@ -21,3 +21,13 @@ func TestSet2(t *testing.T) {
 	fmt.Println(set.Touching(Span[int64]{18, 22}))
 	fmt.Println(set.Touching(Span[int64]{18, 20}))
 }
+
+func TestSet3(t *testing.T) {
+	set := NewOrderedSet[Span[int64], int64]([]Span[int64]{Span[int64]{0,10}, Span[int64]{20, 30}, Span[int64]{15,16}})
+	fmt.Println(set.Touched(Span[int64]{3,5}))
+	fmt.Println(set.Touched(Span[int64]{8, 12}))
+	fmt.Println(set.Touched(Span[int64]{10,11}))
+	fmt.Println(set.Touched(Span[int64]{18, 22}))
+	fmt.Println(set.Touched(Span[int64]{18, 20}))
+	fmt.Println(set.Touched(Span[int64]{-5, 100}))
+}
