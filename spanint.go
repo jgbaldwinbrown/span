@@ -5,7 +5,8 @@ import (
 	"slices"
 )
 
-type OrderedSet[S Spanner[T], T cmp.Ordered] struct {
+type OrderedSet[S Spanner[T], T any] struct {
+	Cmpf func(a, b T) int
 	Center T
 	Left *OrderedSet[S, T]
 	Right *OrderedSet[S, T]
@@ -17,9 +18,9 @@ func (s *OrderedSet[S, T]) Touching(t S) bool {
 	if s == nil {
 		return false
 	}
-	if SpanTouchingPoint(t, s.Center) {
+	if SpanTouchingPointFunc(t, s.Center, s.Cmpf) {
 		for _, span := range s.StartSorted {
-			if Touching(span, t) {
+			if TouchingFunc(s.Cmpf, span, t) {
 				return true
 			}
 		}
@@ -28,12 +29,12 @@ func (s *OrderedSet[S, T]) Touching(t S) bool {
 		}
 		return s.Right.Touching(t)
 	}
-	if t.Right() <= s.Center {
+	if s.Cmpf(t.Right(), s.Center) <= 0 {
 		for _, span := range s.StartSorted {
-			if span.Left() >= t.Right() {
+			if s.Cmpf(span.Left(), t.Right()) >= 0 {
 				break
 			}
-			if Touching(span, t) {
+			if TouchingFunc(s.Cmpf, span, t) {
 				return true
 			}
 		}
@@ -41,35 +42,39 @@ func (s *OrderedSet[S, T]) Touching(t S) bool {
 	}
 	for i := len(s.EndSorted)-1; i >= 0; i-- {
 		span := s.EndSorted[i]
-		if span.Right() <= t.Left() {
+		if s.Cmpf(span.Right(), t.Left()) <= 0 {
 			break
 		}
-		if Touching(span, t) {
+		if TouchingFunc(s.Cmpf, span, t) {
 			return true
 		}
 	}
 	return s.Right.Touching(t)
 }
 
+func SpanTouchingPointFunc[S Spanner[T], T any](s S, t T, cmpf func(x, y T) int) bool {
+	return cmpf(t, s.Left()) >= 0 && cmpf(t, s.Right()) < 0
+}
+
 func SpanTouchingPoint[S Spanner[T], T cmp.Ordered](s S, t T) bool {
-	return t >= s.Left() && t < s.Right()
+	return SpanTouchingPointFunc(s, t, cmp.Compare)
 }
 
 func (s *OrderedSet[S, T]) TouchingPoint(t T) bool {
 	if s == nil {
 		return false
 	}
-	if t == s.Center {
+	if s.Cmpf(t, s.Center) == 0 {
 		for _, span := range s.StartSorted {
-			if SpanTouchingPoint(span, t) {
+			if SpanTouchingPointFunc(span, t, s.Cmpf) {
 				return true
 			}
 		}
 		return false
 	}
-	if t < s.Center {
+	if s.Cmpf(t, s.Center) < 0 {
 		for _, span := range s.StartSorted {
-			if SpanTouchingPoint(span, t) {
+			if SpanTouchingPointFunc(span, t, s.Cmpf) {
 				return true
 			}
 			break
@@ -78,7 +83,7 @@ func (s *OrderedSet[S, T]) TouchingPoint(t T) bool {
 	}
 	for i := len(s.EndSorted) - 1; i >= 0; i-- {
 		span := s.EndSorted[i]
-		if SpanTouchingPoint(span, t) {
+		if SpanTouchingPointFunc(span, t, s.Cmpf) {
 			return true
 		}
 		break
@@ -86,54 +91,67 @@ func (s *OrderedSet[S, T]) TouchingPoint(t T) bool {
 	return s.Right.TouchingPoint(t)
 }
 
-func CmpLeft[S Spanner[T], T cmp.Ordered](a, b S) int {
-	if a.Left() < b.Left() {
-		return -1
+func CmpLeftFunc[S Spanner[T], T any](cmpf func(x, y T) int) func(x, y S) int {
+	return func(a, b S) int {
+		if cmpf(a.Left(), b.Left()) < 0 {
+			return -1
+		}
+		if cmpf(b.Left(), a.Left()) < 0 {
+			return 1
+		}
+		return 0
 	}
-	if b.Left() < a.Left() {
-		return 1
-	}
-	return 0
 }
 
-func CmpRight[S Spanner[T], T cmp.Ordered](a, b S) int {
-	if a.Right() < b.Right() {
-		return -1
-	}
-	if b.Right() < a.Right() {
-		return 1
-	}
-	return 0
+func CmpLeft[S Spanner[T], T cmp.Ordered]() func(x, y S) int {
+	return CmpLeftFunc[S, T](cmp.Compare)
 }
 
-func NewOrderedSet[S Spanner[T], T cmp.Ordered](values []S) *OrderedSet[S, T] {
+func CmpRightFunc[S Spanner[T], T cmp.Ordered](cmpf func(x, y T) int) func(x, y S) int {
+	return func(a, b S) int {
+		if cmpf(a.Right(), b.Right()) < 0 {
+			return -1
+		}
+		if cmpf(b.Right(), a.Right()) < 0 {
+			return 1
+		}
+		return 0
+	}
+}
+
+func CmpRight[S Spanner[T], T cmp.Ordered]() func(x, y S) int {
+	return CmpRightFunc[S, T](cmp.Compare)
+}
+
+func NewOrderedSetFunc[S Spanner[T], T cmp.Ordered](values []S, cmpf func(x, y T) int) *OrderedSet[S, T] {
 	if len(values) < 1 {
 		return nil
 	}
-	if !slices.IsSortedFunc(values, CmpLeft) {
-		slices.SortFunc(values, CmpLeft)
+	if !slices.IsSortedFunc(values, CmpLeftFunc[S, T](cmpf)) {
+		slices.SortFunc(values, CmpLeftFunc[S, T](cmpf))
 	}
 	toLeft := []S{}
 	toRight := []S{}
 	set := &OrderedSet[S, T]{
 		Center: values[len(values)/2].Left(),
+		Cmpf: cmpf,
 	}
 	for _, val := range values {
-		if set.Center >= val.Left() && set.Center < val.Right() {
+		if set.Cmpf(set.Center, val.Left()) >= 0 && set.Cmpf(set.Center, val.Right()) < 0 {
 			set.StartSorted = append(set.StartSorted, val)
-		} else if set.Center >= val.Right() {
+		} else if set.Cmpf(set.Center, val.Right()) >= 0 {
 			toLeft = append(toLeft, val)
 		} else {
 			toRight = append(toRight, val)
 		}
 	}
 	set.EndSorted = slices.Clone(set.StartSorted)
-	slices.SortFunc(set.EndSorted, CmpRight)
+	slices.SortFunc(set.EndSorted, CmpRightFunc[S, T](cmpf))
 	set.Left = NewOrderedSet(toLeft)
 	set.Right = NewOrderedSet(toRight)
 	return set
 }
 
-func NewOrderedSetDynamic[S Spanner[T], T cmp.Ordered](values []S) *OrderedSet[S, T] {
-	return NewOrderedSet(values)
+func NewOrderedSet[S Spanner[T], T cmp.Ordered](values []S) *OrderedSet[S, T] {
+	return NewOrderedSetFunc(values, cmp.Compare)
 }
