@@ -14,7 +14,7 @@ type OrderedSet[S Spanner[T], T any] struct {
 	EndSorted []S
 }
 
-func (s *OrderedSet[S, T]) Touching(t S) bool {
+func (s *OrderedSet[S, T]) Touching(t Spanner[T]) bool {
 	if s == nil {
 		return false
 	}
@@ -52,7 +52,7 @@ func (s *OrderedSet[S, T]) Touching(t S) bool {
 	return s.Right.Touching(t)
 }
 
-func (s *OrderedSet[S, T]) AppendTouched(dst *[]S, t S) {
+func (s *OrderedSet[S, T]) AppendTouched(dst *[]S, t Spanner[T]) {
 	if s == nil {
 		return
 	}
@@ -90,7 +90,7 @@ func (s *OrderedSet[S, T]) AppendTouched(dst *[]S, t S) {
 	s.Right.AppendTouched(dst, t)
 }
 
-func (s *OrderedSet[S, T]) Touched(t S) []S {
+func (s *OrderedSet[S, T]) Touched(t Spanner[T]) []S {
 	var out []S
 	s.AppendTouched(&out, t)
 	return out
