@@ -151,7 +151,7 @@ func CmpLeft[S Spanner[T], T cmp.Ordered]() func(x, y S) int {
 	return CmpLeftFunc[S, T](cmp.Compare)
 }
 
-func CmpRightFunc[S Spanner[T], T cmp.Ordered](cmpf func(x, y T) int) func(x, y S) int {
+func CmpRightFunc[S Spanner[T], T any](cmpf func(x, y T) int) func(x, y S) int {
 	return func(a, b S) int {
 		if cmpf(a.Right(), b.Right()) < 0 {
 			return -1
@@ -167,7 +167,7 @@ func CmpRight[S Spanner[T], T cmp.Ordered]() func(x, y S) int {
 	return CmpRightFunc[S, T](cmp.Compare)
 }
 
-func NewOrderedSetFunc[S Spanner[T], T cmp.Ordered](values []S, cmpf func(x, y T) int) *OrderedSet[S, T] {
+func NewOrderedSetFunc[S Spanner[T], T any](values []S, cmpf func(x, y T) int) *OrderedSet[S, T] {
 	if len(values) < 1 {
 		return nil
 	}
@@ -191,8 +191,8 @@ func NewOrderedSetFunc[S Spanner[T], T cmp.Ordered](values []S, cmpf func(x, y T
 	}
 	set.EndSorted = slices.Clone(set.StartSorted)
 	slices.SortFunc(set.EndSorted, CmpRightFunc[S, T](cmpf))
-	set.Left = NewOrderedSet(toLeft)
-	set.Right = NewOrderedSet(toRight)
+	set.Left = NewOrderedSetFunc(toLeft, cmpf)
+	set.Right = NewOrderedSetFunc(toRight, cmpf)
 	return set
 }
 
